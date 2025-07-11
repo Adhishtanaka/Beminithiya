@@ -1,10 +1,145 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router';
-import { ArrowPathIcon, ExclamationTriangleIcon, PlusIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, ExclamationTriangleIcon, PlusIcon, DocumentTextIcon, MapPinIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 import { appwriteService } from '../../services/appwrite';
 import type { Disaster, DisasterStatus, UrgencyLevel } from '../../types/disaster';
 import type { TaskDocument, ResourceDocument } from '../../services/appwrite';
 import { WorldMap } from '../../components/private/WorldMap';
+
+// Utility function to calculate distance between two coordinates using Haversine formula
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Radius of the Earth in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c; // Distance in kilometers
+  return distance;
+};
+
+// Function to calculate time difference in hours
+const getTimeDifferenceHours = (timestamp1: number, timestamp2: number): number => {
+  return Math.abs(timestamp1 - timestamp2) / 3600; // Convert seconds to hours
+};
+
+// Function to calculate duplicate probability based on distance and time
+const calculateDuplicateProbability = (disaster1: Disaster, disaster2: Disaster): number => {
+  let distanceScore = 0;
+  let timeScore = 0;
+  
+  // Distance scoring (0-50 points)
+  if (disaster1.latitude && disaster1.longitude && disaster2.latitude && disaster2.longitude) {
+    const distance = calculateDistance(
+      disaster1.latitude,
+      disaster1.longitude,
+      disaster2.latitude,
+      disaster2.longitude
+    );
+    
+    if (distance <= 0.5) distanceScore = 50;      // Very close (500m) - 50 points
+    else if (distance <= 1) distanceScore = 40;   // Close (1km) - 40 points
+    else if (distance <= 2) distanceScore = 30;   // Nearby (2km) - 30 points
+    else if (distance <= 5) distanceScore = 20;   // Same area (5km) - 20 points
+    else if (distance <= 10) distanceScore = 10;  // Same city (10km) - 10 points
+    else distanceScore = 0;                       // Far apart - 0 points
+  }
+  
+  // Time scoring (0-50 points)
+  if (disaster1.submitted_time && disaster2.submitted_time) {
+    const timeDiffHours = getTimeDifferenceHours(disaster1.submitted_time, disaster2.submitted_time);
+    
+    if (timeDiffHours <= 1) timeScore = 50;       // Within 1 hour - 50 points
+    else if (timeDiffHours <= 3) timeScore = 40;  // Within 3 hours - 40 points
+    else if (timeDiffHours <= 6) timeScore = 30;  // Within 6 hours - 30 points
+    else if (timeDiffHours <= 12) timeScore = 20; // Within 12 hours - 20 points
+    else if (timeDiffHours <= 24) timeScore = 10; // Same day - 10 points
+    else timeScore = 0;                           // Different days - 0 points
+  }
+  
+  return distanceScore + timeScore; // Total score out of 100
+};
+
+// Function to get probability label and color
+const getProbabilityInfo = (score: number): { label: string; color: string; bgColor: string } => {
+  if (score >= 80) return { 
+    label: 'Very High', 
+    color: 'text-red-700', 
+    bgColor: 'bg-red-100 border-red-300' 
+  };
+  if (score >= 60) return { 
+    label: 'High', 
+    color: 'text-orange-700', 
+    bgColor: 'bg-orange-100 border-orange-300' 
+  };
+  if (score >= 40) return { 
+    label: 'Medium', 
+    color: 'text-yellow-700', 
+    bgColor: 'bg-yellow-100 border-yellow-300' 
+  };
+  if (score >= 20) return { 
+    label: 'Low', 
+    color: 'text-blue-700', 
+    bgColor: 'bg-blue-100 border-blue-300' 
+  };
+  return { 
+    label: 'Very Low', 
+    color: 'text-gray-700', 
+    bgColor: 'bg-gray-100 border-gray-300' 
+  };
+};
+
+// Function to group similar disasters
+const groupSimilarDisasters = (disasters: Disaster[]): Array<{
+  mainDisaster: Disaster;
+  duplicates: Array<{ disaster: Disaster; probability: number }>;
+  isDuplicateGroup: boolean;
+}> => {
+  const groups: Array<{
+    mainDisaster: Disaster;
+    duplicates: Array<{ disaster: Disaster; probability: number }>;
+    isDuplicateGroup: boolean;
+  }> = [];
+  
+  const processed = new Set<string>();
+  
+  disasters.forEach(disaster => {
+    if (processed.has(disaster.$id)) return;
+    
+    const similarDisasters = disasters
+      .filter(other => {
+        if (other.$id === disaster.$id || processed.has(other.$id)) return false;
+        
+        // Check if same disaster type
+        if (other.emergency_type !== disaster.emergency_type) return false;
+        
+        // Calculate probability score
+        const probability = calculateDuplicateProbability(disaster, other);
+        
+        // Include if probability is at least 20 (threshold for potential duplicate)
+        return probability >= 20;
+      })
+      .map(other => ({
+        disaster: other,
+        probability: calculateDuplicateProbability(disaster, other)
+      }))
+      .sort((a, b) => b.probability - a.probability); // Sort by probability descending
+    
+    // Mark all similar disasters as processed
+    similarDisasters.forEach(similar => processed.add(similar.disaster.$id));
+    processed.add(disaster.$id);
+    
+    groups.push({
+      mainDisaster: disaster,
+      duplicates: similarDisasters,
+      isDuplicateGroup: similarDisasters.length > 0
+    });
+  });
+  
+  return groups;
+};
 
 export const GovernmentDashboard = () => {
   const [disasters, setDisasters] = useState<Disaster[]>([]);
@@ -66,6 +201,10 @@ export const GovernmentDashboard = () => {
   ];
 
   const filteredDisasters = disasters.filter(disaster => disaster.status === activeTab);
+  
+  // Group disasters only for pending tab
+  const disasterGroups = activeTab === 'pending' ? groupSimilarDisasters(filteredDisasters) : 
+    filteredDisasters.map(disaster => ({ mainDisaster: disaster, duplicates: [], isDuplicateGroup: false }));
 
   const getStatusColor = (status: DisasterStatus): string => {
     switch (status) {
@@ -102,6 +241,90 @@ export const GovernmentDashboard = () => {
     }
   };
 
+  const renderDisasterItem = (disaster: Disaster, isSubItem = false, probability?: number) => (
+    <div
+      key={disaster.$id}
+      className={`border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 bg-gray-100 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-300 hover:shadow-lg hover:scale-105 cursor-pointer ${
+        isSubItem ? 'ml-8 mt-3 border-l-4 border-l-orange-400 bg-orange-50/50 dark:bg-orange-900/20' : ''
+      }`}
+      onClick={() => handleDisasterItemClick(disaster)}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-3">
+            {isSubItem && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 text-sm font-medium">
+                  <UserGroupIcon className="w-4 h-4" />
+                  <span>Possible Duplicate Report</span>
+                </div>
+                {probability && (
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold border ${getProbabilityInfo(probability).bgColor} ${getProbabilityInfo(probability).color}`}>
+                    Probability of being same is {probability}%
+                  </div>
+                )}
+              </div>
+            )}
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white capitalize">
+              {disaster.emergency_type} Emergency
+            </h3>
+            <span className={`inline-block px-4 py-2 rounded-full text-sm font-medium border ${getUrgencyColor(disaster.urgency_level)}`}
+              style={{ borderColor: 'rgba(59,130,246,0.3)' }}>
+              {disaster.urgency_level?.toUpperCase()}
+            </span>
+          </div>
+          <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm leading-relaxed">{disaster.situation}</p>
+          <div className="flex items-center gap-6 text-sm text-gray-400 dark:text-gray-500">
+            <span className={`inline-block px-4 py-2 rounded-full text-xs font-medium border ${getStatusColor(disaster.status)}`}
+              style={{ borderColor: 'rgba(59,130,246,0.3)' }}>
+              {disaster.status.toUpperCase()}
+            </span>
+            <span className="text-gray-500 dark:text-gray-400">
+              {new Date(disaster.submitted_time * 1000).toLocaleString()}
+            </span>
+            {disaster.latitude && disaster.longitude && (
+              <span className="flex items-center gap-1 text-blue-500 dark:text-blue-400">
+                <MapPinIcon className="w-4 h-4" />
+                {disaster.latitude.toFixed(4)}, {disaster.longitude.toFixed(4)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700/50">
+        {activeTab === 'active' && (
+          <>
+            <Link
+              to={`/gov/disaster/${disaster.$id}/addResource`}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              <PlusIcon className="w-4 h-4 mr-2" />
+              Add Resources
+            </Link>
+            <Link
+              to={`/gov/disaster/${disaster.$id}`}
+              className="border border-gray-600 dark:border-gray-400 text-gray-900 dark:text-gray-100 hover:text-white hover:bg-gray-800 dark:hover:bg-gray-700 px-8 py-4 rounded-lg transition-all duration-200 hover:border-gray-500 dark:hover:border-gray-300 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              <DocumentTextIcon className="w-4 h-4 mr-2" />
+              More Details
+            </Link>
+          </>
+        )}
+        {(activeTab === 'pending' || activeTab === 'archived') && (
+          <Link
+            to={`/gov/disaster/${disaster.$id}/report`}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+          >
+            <DocumentTextIcon className="w-4 h-4 mr-2" />
+            Report Details
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
       {/* Ambient floating background elements for depth */}
@@ -125,7 +348,6 @@ export const GovernmentDashboard = () => {
                   <ArrowPathIcon className={`w-5 h-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
                   Refresh Data
                 </button>
-
               </div>
             </div>
           </div>
@@ -238,66 +460,21 @@ export const GovernmentDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {filteredDisasters.map((disaster) => (
-                    <div
-                      key={disaster.$id}
-                      className="border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 bg-gray-100 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-300 hover:shadow-lg hover:scale-105 cursor-pointer"
-                      onClick={() => handleDisasterItemClick(disaster)}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white capitalize">
-                              {disaster.emergency_type} Emergency
-                            </h3>
-                            <span className={`inline-block px-4 py-2 rounded-full text-sm font-medium border ${getUrgencyColor(disaster.urgency_level)}`}
-                              style={{ borderColor: 'rgba(59,130,246,0.3)' }}>
-                              {disaster.urgency_level?.toUpperCase()}
-                            </span>
+                  {disasterGroups.map((group, index) => (
+                    <div key={group.mainDisaster.$id}>
+                      {/* Main disaster with duplicate indicator */}
+                      <div className="relative">
+                        {group.isDuplicateGroup && (
+                          <div className="absolute -top-3 -left-3 bg-orange-500 text-white text-xs px-3 py-1 rounded-full font-medium shadow-lg z-10 flex items-center gap-1">
+                            <UserGroupIcon className="w-3 h-3" />
+                            {group.duplicates.length + 1} Similar Reports
                           </div>
-                          <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm leading-relaxed">{disaster.situation}</p>
-                          <div className="flex items-center gap-6 text-sm text-gray-400 dark:text-gray-500">
-                            <span className={`inline-block px-4 py-2 rounded-full text-xs font-medium border ${getStatusColor(disaster.status)}`}
-                              style={{ borderColor: 'rgba(59,130,246,0.3)' }}>
-                              {disaster.status.toUpperCase()}
-                            </span>
-                            <span className="text-gray-500 dark:text-gray-400">
-                              {new Date(disaster.submitted_time * 1000).toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700/50">
-                        {activeTab === 'active' && (
-                          <>
-                            <Link
-                              to={`/gov/disaster/${disaster.$id}/addResource`}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                            >
-                              <PlusIcon className="w-4 h-4 mr-2" />
-                              Add Resources
-                            </Link>
-                            <Link
-                              to={`/gov/disaster/${disaster.$id}`}
-                              className="border border-gray-600 dark:border-gray-400 text-gray-900 dark:text-gray-100 hover:text-white hover:bg-gray-800 dark:hover:bg-gray-700 px-8 py-4 rounded-lg transition-all duration-200 hover:border-gray-500 dark:hover:border-gray-300 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                            >
-                              <DocumentTextIcon className="w-4 h-4 mr-2" />
-                              More Details
-                            </Link>
-                          </>
                         )}
-                        {(activeTab === 'pending' || activeTab === 'archived') && (
-                          <Link
-                            to={`/gov/disaster/${disaster.$id}/report`}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                          >
-                            <DocumentTextIcon className="w-4 h-4 mr-2" />
-                            Report Details
-                          </Link>
-                        )}
+                        {renderDisasterItem(group.mainDisaster, false)}
                       </div>
+                      
+                      {/* Duplicate disasters */}
+                      {group.duplicates.map((duplicate) => renderDisasterItem(duplicate.disaster, true, duplicate.probability))}
                     </div>
                   ))}
                 </div>

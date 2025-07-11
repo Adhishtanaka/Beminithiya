@@ -97,23 +97,37 @@ export const DisasterDetailsUserPage: React.FC = () => {
         fetchDisasterDetails();
     }, [disasterId]);
 
+    // Only initialize map when 'Citizen Overview' tab is active and disaster/location is available
     useEffect(() => {
-        if (disaster && disaster.latitude && disaster.longitude && mapRef.current && !leafletMapInstance.current) {
-            leafletMapInstance.current = L.map(mapRef.current).setView([disaster.latitude, disaster.longitude], 13);
+        if (
+            selectedTab === 0 &&
+            disaster &&
+            disaster.latitude &&
+            disaster.longitude &&
+            mapRef.current &&
+            !leafletMapInstance.current
+        ) {
+            leafletMapInstance.current = L.map(mapRef.current).setView([
+                disaster.latitude,
+                disaster.longitude
+            ], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(leafletMapInstance.current);
-            L.marker([disaster.latitude, disaster.longitude]).addTo(leafletMapInstance.current)
+            L.marker([
+                disaster.latitude,
+                disaster.longitude
+            ]).addTo(leafletMapInstance.current)
                 .bindPopup('Disaster Location').openPopup();
         }
-        // Clean up map on unmount
+        // Clean up map when switching tabs or unmounting
         return () => {
             if (leafletMapInstance.current) {
                 leafletMapInstance.current.remove();
                 leafletMapInstance.current = null;
             }
         };
-    }, [disaster]);
+    }, [disaster, selectedTab]);
 
     const formatTimeAgo = (timestamp: number) => {
         const now = Math.floor(Date.now() / 1000);
@@ -316,8 +330,8 @@ export const DisasterDetailsUserPage: React.FC = () => {
                                             </div>
                                         )}
 
-                                        {/* Leaflet Map for Disaster Location */}
-                                        {disaster.latitude && disaster.longitude && (
+                                        {/* Only render map when tab is active */}
+                                        {selectedTab === 0 && disaster.latitude && disaster.longitude && (
                                             <div className="mt-6">
                                                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 transition-colors duration-300">Disaster Location</h3>
                                                 <div ref={mapRef} id="leaflet-map" style={{ height: '300px', width: '100%', borderRadius: '0.75rem', overflow: 'hidden' }}></div>
