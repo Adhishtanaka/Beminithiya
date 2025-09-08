@@ -10,7 +10,7 @@ module.exports = {
 
   // Puppeteer configuration
   PUPPETEER_OPTIONS: {
-    executablePath: "/usr/bin/google-chrome", // Verify this path on your system
+    executablePath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", // Verify this path on your system
     headless: true,
     args: [
       "--no-sandbox",

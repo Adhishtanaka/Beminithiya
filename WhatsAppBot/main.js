@@ -3,6 +3,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const config = require('./config');
 const { setupCommandHandlers } = require('./handlers/commandHandler');
 const { formatMessage } = require('./utils/messageFormatter');
+const qrcode = require('qrcode-terminal');
 
 // --- Bot Initialization ---
 const client = new Client({
@@ -20,9 +21,8 @@ const userStates = new Map();
 
 // --- Bot Event Handlers ---
 client.on('qr', (qr) => {
-    console.log('QR RECEIVED', qr);
-    // You can use a library like 'qrcode-terminal' to display the QR in the console:
-    // require('qrcode-terminal').generate(qr, { small: true });
+    console.log('QR RECEIVED');
+    qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {

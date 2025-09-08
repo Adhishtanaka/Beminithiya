@@ -5,7 +5,6 @@ from app.services.appwrite_service import AppwriteService
 from app.services.second_workflow import create_generate_disaster_task_graph
 from app.models.disaster import DisasterRequest
 from app.models.resource import ResourcePayload, DeleteResourceRequest, UpdateAvailabilityRequest
-from app.models.user import DeleteUser
 
 
 router = APIRouter(prefix="/gov", tags=["Government"])

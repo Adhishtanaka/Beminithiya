@@ -7,6 +7,7 @@
 		"axios": "^1.10.0",
 		"form-data": "^4.0.3",
 		"puppeteer": "^24.14.0",
+		"qrcode-terminal": "^0.12.0",
 		"whatsapp-web.js": "^1.31.0"
 	},
 	"scripts": {

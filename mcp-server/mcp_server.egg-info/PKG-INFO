@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: mcp-server
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: mcp[cli]>=1.12.2
+Requires-Dist: requests>=2.32.4

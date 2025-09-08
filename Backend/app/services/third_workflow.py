@@ -84,14 +84,15 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
     else:
         resource_info = "No nearby resources identified."
     prompt = f"""
-    You are an emergency response coordinator AI. A citizen has submitted an emergency request that requires immediate response. Analyze the situation and determine both the appropriate response task AND which responder roles are needed.
+    You are an emergency response coordinator AI. A citizen has submitted an emergency request that requires immediate response. Analyze the situation and determine both the appropriate response task AND which responder roles are needed.if request is inappropriate
+    say verify the request details and take legal actions.
 
     EMERGENCY REQUEST DETAILS:
     Emergency Type: {emergency_type}
     Help Needed: {help_needed}
     Urgency Level: {urgency}
     Location: ({latitude}, {longitude})
-    
+
     {resource_info}
 
     AVAILABLE RESPONDER ROLES:
@@ -143,7 +144,7 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
             "emergency_type": emergency_type,
             "urgency_level": urgency,
             "latitude": float(latitude),  # FIX: Convert to float
-            "longitude": float(longitude), 
+            "longitude": float(longitude),
             "help_needed": help_needed,
             "user_id": state["user_id"],
             "disaster_id": state["disaster_id"],
@@ -158,7 +159,7 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
             fallback_prompt = f"""
             Emergency: {help_needed}
             Type: {emergency_type}, Urgency: {urgency}
-            
+
             JSON response:
             {{
                 "description": "Task for responding to {help_needed} at ({latitude}, {longitude})",
@@ -213,7 +214,7 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
             "emergency_type": emergency_type,
             "urgency_level": urgency,
             "latitude": float(latitude),  # FIX: Convert to float
-            "longitude": float(longitude), 
+            "longitude": float(longitude),
             "help_needed": help_needed,
             "user_id": state["user_id"],
             "disaster_id": state["disaster_id"],

@@ -17,6 +17,9 @@ importers:
       puppeteer:
         specifier: ^24.14.0
         version: 24.14.0
+      qrcode-terminal:
+        specifier: ^0.12.0
+        version: 0.12.0
       whatsapp-web.js:
         specifier: ^1.31.0
         version: 1.31.0
@@ -642,6 +645,10 @@ packages:
   puppeteer@24.14.0:
     resolution: {integrity: sha512-GB7suRDkp9pUnxpNGAORICQCtw11KFbg6U2iJXVTflzJLK5D1qzq8xOOmLgN/QnDBpDMdpn96ri52XkuN83Giw==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  qrcode-terminal@0.12.0:
+    resolution: {integrity: sha512-EXtzRZmC+YGmGlDFbXKxQiMZNwCLEO6BANKXG4iCtSIM0yqc/pappSx3RIKr4r0uh5JsBckOXeKrB3Iz7mdQpQ==}
     hasBin: true
 
   readable-stream@2.3.8:
@@ -1541,6 +1548,8 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
+
+  qrcode-terminal@0.12.0: {}
 
   readable-stream@2.3.8:
     dependencies:
