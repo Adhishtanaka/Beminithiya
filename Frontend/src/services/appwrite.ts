@@ -1,6 +1,6 @@
-import { Client, Account, Databases, Query } from 'appwrite';
-import { encode } from 'ngeohash';
-import type { UserProfile } from '../types/users';
+import { Client, Account, Databases, Query } from "appwrite";
+import { encode } from "ngeohash";
+import type { UserProfile } from "../types/users";
 
 export interface AppwriteConfig {
   endpoint: string;
@@ -15,6 +15,11 @@ export interface DisasterDocument {
   submitted_time: number;
   status: string;
   [key: string]: unknown;
+}
+
+export interface UserLocation {
+  latitude: number;
+  longitude: number;
 }
 
 export interface AIMatrixDocument {
@@ -55,7 +60,7 @@ export class AppwriteService {
   private endpoint: string;
   private projectId: string;
   private databaseId: string;
-  
+
   // Collection IDs from environment variables
   public readonly usersCollectionId: string;
   public readonly disastersCollectionId: string;
@@ -68,40 +73,62 @@ export class AppwriteService {
     this.endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
     this.projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
     this.databaseId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
-    
+
     // Collection IDs from environment variables
     this.usersCollectionId = import.meta.env.VITE_APPWRITE_USERS_COLLECTION_ID;
-    this.disastersCollectionId = import.meta.env.VITE_APPWRITE_DISASTERS_COLLECTION_ID;
-    this.aiMatrixCollectionId = import.meta.env.VITE_APPWRITE_AI_MATRIX_COLLECTION_ID;
+    this.disastersCollectionId =
+      import.meta.env.VITE_APPWRITE_DISASTERS_COLLECTION_ID;
+    this.aiMatrixCollectionId =
+      import.meta.env.VITE_APPWRITE_AI_MATRIX_COLLECTION_ID;
     this.tasksCollectionId = import.meta.env.VITE_APPWRITE_TASKS_COLLECTION_ID;
-    this.userRequestsCollectionId = import.meta.env.VITE_APPWRITE_USER_REQUESTS_COLLECTION_ID;
-    this.resourcesCollectionId = import.meta.env.VITE_APPWRITE_RESOURCES_COLLECTION_ID;
+    this.userRequestsCollectionId =
+      import.meta.env.VITE_APPWRITE_USER_REQUESTS_COLLECTION_ID;
+    this.resourcesCollectionId =
+      import.meta.env.VITE_APPWRITE_RESOURCES_COLLECTION_ID;
 
     // Validate required environment variables
     const requiredVars = [
-      { name: 'VITE_APPWRITE_PROJECT_ID', value: this.projectId },
-      { name: 'VITE_APPWRITE_ENDPOINT', value: this.endpoint },
-      { name: 'VITE_APPWRITE_DATABASE_ID', value: this.databaseId },
-      { name: 'VITE_APPWRITE_USERS_COLLECTION_ID', value: this.usersCollectionId },
-      { name: 'VITE_APPWRITE_DISASTERS_COLLECTION_ID', value: this.disastersCollectionId },
-      { name: 'VITE_APPWRITE_AI_MATRIX_COLLECTION_ID', value: this.aiMatrixCollectionId },
-      { name: 'VITE_APPWRITE_TASKS_COLLECTION_ID', value: this.tasksCollectionId },
-      { name: 'VITE_APPWRITE_USER_REQUESTS_COLLECTION_ID', value: this.userRequestsCollectionId },
-      { name: 'VITE_APPWRITE_RESOURCES_COLLECTION_ID', value: this.resourcesCollectionId }
+      { name: "VITE_APPWRITE_PROJECT_ID", value: this.projectId },
+      { name: "VITE_APPWRITE_ENDPOINT", value: this.endpoint },
+      { name: "VITE_APPWRITE_DATABASE_ID", value: this.databaseId },
+      {
+        name: "VITE_APPWRITE_USERS_COLLECTION_ID",
+        value: this.usersCollectionId,
+      },
+      {
+        name: "VITE_APPWRITE_DISASTERS_COLLECTION_ID",
+        value: this.disastersCollectionId,
+      },
+      {
+        name: "VITE_APPWRITE_AI_MATRIX_COLLECTION_ID",
+        value: this.aiMatrixCollectionId,
+      },
+      {
+        name: "VITE_APPWRITE_TASKS_COLLECTION_ID",
+        value: this.tasksCollectionId,
+      },
+      {
+        name: "VITE_APPWRITE_USER_REQUESTS_COLLECTION_ID",
+        value: this.userRequestsCollectionId,
+      },
+      {
+        name: "VITE_APPWRITE_RESOURCES_COLLECTION_ID",
+        value: this.resourcesCollectionId,
+      },
     ];
 
-    const missingVars = requiredVars.filter(v => !v.value).map(v => v.name);
+    const missingVars = requiredVars.filter((v) => !v.value).map((v) => v.name);
     if (missingVars.length > 0) {
-      throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+      throw new Error(
+        `Missing required environment variables: ${missingVars.join(", ")}`,
+      );
     }
 
     // Initialize Appwrite client
     this.client = new Client();
-    
+
     // Configure client
-    this.client
-      .setEndpoint(this.endpoint)
-      .setProject(this.projectId);
+    this.client.setEndpoint(this.endpoint).setProject(this.projectId);
 
     // Initialize services
     this.account = new Account(this.client);
@@ -113,7 +140,7 @@ export class AppwriteService {
     return this.databases.getDocument(
       this.databaseId,
       collectionId,
-      documentId
+      documentId,
     );
   }
 
@@ -122,7 +149,7 @@ export class AppwriteService {
       this.databaseId,
       collectionId,
       documentId,
-      data
+      data,
     );
   }
 
@@ -133,19 +160,27 @@ export class AppwriteService {
   /**
    * Get AI Matrix by disaster ID
    */
-  async getAIMatrixByDisasterId(disasterId: string): Promise<AIMatrixDocument | null> {
+  async getAIMatrixByDisasterId(
+    disasterId: string,
+  ): Promise<AIMatrixDocument | null> {
     try {
       const document = await this.databases.getDocument(
         this.databaseId,
         this.aiMatrixCollectionId,
-        `matrix_${disasterId}`
+        `matrix_${disasterId}`,
       );
       return document as unknown as AIMatrixDocument;
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 404) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 404
+      ) {
         return null;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to get AI matrix: ${errorMessage}`);
     }
   }
@@ -158,12 +193,13 @@ export class AppwriteService {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.disastersCollectionId,
-        [Query.limit(100)] // Add limit to 100
+        [Query.limit(100)], // Add limit to 100
       );
-      console.log('Fetched disasters:', response.documents); // Log fetched disasters
+      console.log("Fetched disasters:", response.documents); // Log fetched disasters
       return response.documents as unknown as DisasterDocument[];
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to get all disasters: ${errorMessage}`);
     }
   }
@@ -176,14 +212,20 @@ export class AppwriteService {
       const document = await this.databases.getDocument(
         this.databaseId,
         this.disastersCollectionId,
-        disasterId
+        disasterId,
       );
       return document as unknown as DisasterDocument;
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 404) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 404
+      ) {
         return null;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to get disaster: ${errorMessage}`);
     }
   }
@@ -191,16 +233,19 @@ export class AppwriteService {
   /**
    * Get all resources by disaster ID
    */
-  async getResourcesByDisasterId(disasterId: string): Promise<ResourceDocument[]> {
+  async getResourcesByDisasterId(
+    disasterId: string,
+  ): Promise<ResourceDocument[]> {
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.resourcesCollectionId,
-        [Query.equal("disaster_id", disasterId), Query.limit(100)] // Add limit to 100
+        [Query.equal("disaster_id", disasterId), Query.limit(100)], // Add limit to 100
       );
       return response.documents as unknown as ResourceDocument[];
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to get resources: ${errorMessage}`);
     }
   }
@@ -213,11 +258,12 @@ export class AppwriteService {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.tasksCollectionId,
-        [Query.equal("disaster_id", disasterId), Query.limit(100)] // Add limit to 100
+        [Query.equal("disaster_id", disasterId), Query.limit(100)], // Add limit to 100
       );
       return response.documents as unknown as TaskDocument[];
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to get tasks: ${errorMessage}`);
     }
   }
@@ -225,33 +271,38 @@ export class AppwriteService {
   /**
    * Find nearby disasters within a week
    */
-  async getNearbyDisasters(latitude: number, longitude: number): Promise<DisasterDocument[]> {
+  async getNearbyDisasters(
+    latitude: number,
+    longitude: number,
+  ): Promise<DisasterDocument[]> {
     const EXCLUDED_KEYS = new Set([
       "gdac_disasters",
-      "cnn_analysis", 
+      "cnn_analysis",
       "weather_data",
       "citizen_survival_guide",
-      "government_report"
+      "government_report",
     ]);
 
     const geohashPrefix = encode(latitude, longitude, 4);
-    const oneWeekAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
+    const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
 
-    console.log(`Querying disasters near geohash: ${geohashPrefix} from ${oneWeekAgo} seconds ago`);
+    console.log(
+      `Querying disasters near geohash: ${geohashPrefix} from ${oneWeekAgo} seconds ago`,
+    );
 
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.disastersCollectionId,
         [
-          Query.startsWith('geohash', geohashPrefix),
-          Query.greaterThan('submitted_time', oneWeekAgo),
-          Query.limit(100)
-        ]
+          Query.startsWith("geohash", geohashPrefix),
+          Query.greaterThan("submitted_time", oneWeekAgo),
+          Query.limit(100),
+        ],
       );
 
       const results: DisasterDocument[] = [];
-      
+
       for (const document of response.documents) {
         // Clean the document by removing excluded keys
         const cleaned: Record<string, unknown> = {};
@@ -262,27 +313,64 @@ export class AppwriteService {
         }
 
         const submittedTime = cleaned.submitted_time;
-        if (typeof submittedTime === 'number' && submittedTime >= oneWeekAgo) {
+        if (typeof submittedTime === "number" && submittedTime >= oneWeekAgo) {
           results.push(cleaned as DisasterDocument);
         }
       }
 
       return results;
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       console.error(`Error querying disasters: ${errorMessage}`);
       return [];
     }
   }
+  /**
+   * Get a user's latitude and longitude by user ID
+   */
+  async getUserLocation(
+    userId: string,
+  ): Promise<{ latitude: number; longitude: number } | null> {
+    try {
+      const userDoc = await this.databases.getDocument(
+        this.databaseId,
+        this.usersCollectionId,
+        userId,
+      );
 
+      const latitude = userDoc.latitude as number | undefined;
+      const longitude = userDoc.longitude as number | undefined;
+
+      if (latitude === undefined || longitude === undefined) {
+        return null; // Location not set
+      }
+
+      return { latitude, longitude };
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 404
+      ) {
+        return null; // User not found
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Failed to get user location: ${errorMessage}`);
+    }
+  }
   /**
    * Get users (except government) by disaster geohash prefix (first 4 chars of disaster's geohash)
    */
-  async getUsersByDisasterGeohash(disasterId: string): Promise<UserProfileWithGeohash[]> {
+  async getUsersByDisasterGeohash(
+    disasterId: string,
+  ): Promise<UserProfileWithGeohash[]> {
     // Get the disaster document
     const disaster = await this.getDisasterById(disasterId);
-    if (!disaster || typeof disaster.geohash !== 'string') {
-      throw new Error('Disaster or geohash not found');
+    if (!disaster || typeof disaster.geohash !== "string") {
+      throw new Error("Disaster or geohash not found");
     }
     const geohashPrefix = disaster.geohash.slice(0, 4);
     // Query users whose geohash starts with this prefix and role != 'government'
@@ -290,14 +378,14 @@ export class AppwriteService {
       this.databaseId,
       this.usersCollectionId,
       [
-        Query.startsWith('geohash', geohashPrefix),
-        Query.notEqual('role', 'government'),
-        Query.limit(100)
-      ]
+        Query.startsWith("geohash", geohashPrefix),
+        Query.notEqual("role", "government"),
+        Query.limit(100),
+      ],
     );
     // Return user info (uid, name, role, skills, department, unit, position, status, phone, email, profile_image_url, latitude, longitude, geohash)
     return response.documents.map((user: unknown) => {
-      const u = user as UserProfile & { geohash: string, created_at: string };
+      const u = user as UserProfile & { geohash: string; created_at: string };
       return {
         uid: u.uid,
         name: u.name,
@@ -324,12 +412,20 @@ export class AppwriteService {
   async getMessages(reportId?: string | null): Promise<Message[]> {
     const collectionId = import.meta.env.VITE_APPWRITE_MESSAGES_COLLECTION_ID;
     const queries = reportId
-      ? [Query.equal("report_id", reportId), Query.orderAsc("timestamp"), Query.limit(100)]
-      : [Query.isNull("report_id"), Query.orderAsc("timestamp"), Query.limit(100)];
+      ? [
+          Query.equal("report_id", reportId),
+          Query.orderAsc("timestamp"),
+          Query.limit(100),
+        ]
+      : [
+          Query.isNull("report_id"),
+          Query.orderAsc("timestamp"),
+          Query.limit(100),
+        ];
     const response = await this.databases.listDocuments(
       this.databaseId,
       collectionId,
-      queries
+      queries,
     );
     return response.documents.map((doc: Record<string, unknown>) => ({
       $id: doc.$id as string,
@@ -344,13 +440,18 @@ export class AppwriteService {
   /**
    * Create a chat message
    */
-  async createMessage(data: { user: string; content: string; timestamp: string; report_id?: string }): Promise<Message> {
+  async createMessage(data: {
+    user: string;
+    content: string;
+    timestamp: string;
+    report_id?: string;
+  }): Promise<Message> {
     const collectionId = import.meta.env.VITE_APPWRITE_MESSAGES_COLLECTION_ID;
     const doc = await this.databases.createDocument(
       this.databaseId,
       collectionId,
-      'unique()',
-      data
+      "unique()",
+      data,
     );
     return {
       $id: doc.$id,
@@ -369,11 +470,18 @@ export class AppwriteService {
     const collectionId = import.meta.env.VITE_APPWRITE_MESSAGES_COLLECTION_ID;
     const databaseId = this.databaseId;
     const channel = `databases.${databaseId}.collections.${collectionId}.documents`;
-    const unsubscribe = this.client.subscribe(channel, (response: { events: string[]; payload: Message }) => {
-      if (response.events.includes('databases.*.collections.*.documents.*.create')) {
-        callback(response.payload);
-      }
-    });
+    const unsubscribe = this.client.subscribe(
+      channel,
+      (response: { events: string[]; payload: Message }) => {
+        if (
+          response.events.includes(
+            "databases.*.collections.*.documents.*.create",
+          )
+        ) {
+          callback(response.payload);
+        }
+      },
+    );
     return unsubscribe;
   }
 }
