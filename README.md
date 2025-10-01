@@ -107,7 +107,7 @@ APPWRITE_USER_REQUESTS_COLLECTION_ID=your_user_requests_collection_id
 APPWRITE_RESOURCES_COLLECTION_ID=your_resources_collection_id
 ```
 
-## MCP Server 
+## MCP Server
 
 This MCP server provides location-aware disaster response capabilities. This server connects to a disaster management API to help users find nearby emergencies and report assistance needs. **No authentication or token setup is required.**
 
@@ -125,12 +125,13 @@ cd mcp-Server
 uv venv
 
 # Install dependencies
-uv pip install
+uv sync
 ```
 
 ### 2. Run the MCP Server
 ```bash
 uv run mcp install server.py
+uv run mcp dev server.py
 ```
 
 ## Telegram Bot
@@ -152,7 +153,7 @@ The model files used to train and run models for disaster detection and people c
 * `cnn_model.pth`: Pre-trained PyTorch model for disaster classification and crowd estimation.
 * `yolo.pt`: YOLO model weights for object detection.
 
-## Assumptions 
+## Assumptions
 
 * **Email Domain Trust**: In our role-based auth, certain roles (e.g. government officials and first responders) must use email domains listed in `trusted_domain.yaml` to signup. Example:
 
@@ -274,7 +275,7 @@ Government Approval → Disaster Lookup →  Task Generation + Responder Assignm
 
 #### Process Flow:
 ```
-Help Request → Disaster Lookup → Resource Discovery → 
+Help Request → Disaster Lookup → Resource Discovery →
 Quick Task Generation by ai agent → Add to Task Queue → Responder Assignment
 ```
 

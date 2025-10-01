@@ -13,9 +13,9 @@ load_dotenv()
 appwrite_service = AppwriteService()
 
 gemini = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY")
+    model="gemini-2.0-flash", google_api_key=os.getenv("GOOGLE_API_KEY")
 )
+
 
 class EmergencyRequestState(TypedDict):
     disaster_id: str
@@ -52,11 +52,7 @@ def fetch_nearby_resources(state: EmergencyRequestState) -> EmergencyRequestStat
                 distance = math.sqrt(
                     (user_lat - resource_lat) ** 2 + (user_lon - resource_lon) ** 2
                 )
-                resource_data = {
-                    **doc,
-                    "distance": distance,
-                    "resource_id": doc["$id"]
-                }
+                resource_data = {**doc, "distance": distance, "resource_id": doc["$id"]}
                 nearby_resources.append(resource_data)
         nearby_resources.sort(key=lambda x: x.get("distance", float("inf")))
         return {**state, "nearby_resources": nearby_resources[:5]}
@@ -78,14 +74,23 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
         resource_info = "Available nearby resources:\n"
         for resource in nearby_resources[:3]:
             resource_info += f"- {resource.get('name', 'Unknown')}: {resource.get('type', 'general')} at ({resource.get('latitude')}, {resource.get('longitude')})\n"
-            resource_info += f"  Description: {resource.get('description', 'No description')}\n"
+            resource_info += (
+                f"  Description: {resource.get('description', 'No description')}\n"
+            )
             resource_info += f"  Contact: {resource.get('contact', 'No contact')}\n"
             resource_info += f"  Status: {resource.get('status', 'unknown')}\n"
     else:
         resource_info = "No nearby resources identified."
     prompt = f"""
-    You are an emergency response coordinator AI. A citizen has submitted an emergency request that requires immediate response. Analyze the situation and determine both the appropriate response task AND which responder roles are needed.if request is inappropriate
-    say verify the request details and take legal actions.
+    You are an emergency response coordinator AI. A citizen has submitted an emergency request during a disaster. Your job is to create an actionable response task and assign the appropriate responder roles.
+
+    CRITICAL: Most requests are LEGITIMATE emergency needs. Only flag as inappropriate if the request is clearly sexual, abusive, or a prank (e.g., "send kiss", "sexy time", "haha joke", "prank call").
+
+    LEGITIMATE EMERGENCY NEEDS INCLUDE:
+    - Food, water, shelter (ALWAYS legitimate - assign to volunteers)
+    - Medical help, injuries, rescue (ALWAYS legitimate - assign to first responders)
+    - Evacuation, safety concerns (ALWAYS legitimate)
+    - Basic supplies, clothing, sanitation (ALWAYS legitimate - assign to volunteers)
 
     EMERGENCY REQUEST DETAILS:
     Emergency Type: {emergency_type}
@@ -96,24 +101,30 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
     {resource_info}
 
     AVAILABLE RESPONDER ROLES:
-    - "vol" (Volunteers): Community volunteers for basic needs, logistics, welfare checks
-    - "fr" (First Responders): Professional emergency responders for medical/rescue/safety
-    - "both": For complex situations requiring both professional expertise AND community support
+    - "vol" (Volunteers): For food, water, shelter, supplies, basic needs, welfare checks, non-medical assistance
+    - "fr" (First Responders): For medical emergencies, injuries, rescue operations, fire, life-threatening situations
+    - "both": For large-scale disasters affecting many people, mass casualties, or complex situations needing both professional and volunteer support
 
     ROLE ASSIGNMENT RULES:
-    1. Use "both" when: Mass casualty events, complex disasters, large-scale evacuations
-    2. Use "fr" when: Medical emergencies, technical rescues, life-threatening situations
-    3. Use "vol" when: Basic needs, welfare checks, non-emergency logistics
+    1. Food/Water/Hunger/Thirst/Supplies → "vol"
+    2. Medical/Injury/Bleeding/Rescue/Fire → "fr"
+    3. Mass casualties/Large groups/Complex disasters → "both"
+    4. If inappropriate (sexual/prank) → create verification task for "vol"
 
     Generate JSON response:
     {{
-        "description": "Direct task for responders (max 2 sentences)",
+        "description": "Clear, actionable task for responders (1-2 sentences). For food requests say 'Deliver food supplies to person at location'. For medical say 'Provide medical assistance to injured person at location'.",
         "roles": "exactly one: 'vol', 'fr', or 'both'",
         "reasoning": "Brief explanation of role assignment",
         "resource_utilization": "How to use nearby resources or 'none'"
     }}
 
-    Respond ONLY with valid JSON.
+    EXAMPLES:
+    - "Need food" → {{"description": "Deliver food supplies to hungry person at location", "roles": "vol"}}
+    - "Send sexy kiss" → {{"description": "Verify request details and assess if legitimate emergency assistance needed", "roles": "vol"}}
+    - "Broken leg" → {{"description": "Provide medical assistance to person with leg injury", "roles": "fr"}}
+
+    Respond ONLY with valid JSON. DO NOT ask questions or inquire - CREATE A TASK.
     """
     try:
         messages = [{"role": "user", "content": prompt}]
@@ -143,7 +154,7 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
             "roles": valid_roles,
             "emergency_type": emergency_type,
             "urgency_level": urgency,
-            "latitude": float(latitude),  # FIX: Convert to float
+            "latitude": float(latitude),
             "longitude": float(longitude),
             "help_needed": help_needed,
             "user_id": state["user_id"],
@@ -155,55 +166,85 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
         }
         return {**state, "generated_task": task}
     except Exception as e:
-        try:
-            fallback_prompt = f"""
-            Emergency: {help_needed}
-            Type: {emergency_type}, Urgency: {urgency}
+        # Fallback logic with better keyword detection
+        help_lower = help_needed.lower()
+        emergency_lower = emergency_type.lower()
 
-            JSON response:
-            {{
-                "description": "Task for responding to {help_needed} at ({latitude}, {longitude})",
-                "roles": "choose one: 'vol', 'fr', or 'both'"
-            }}
-            """
-            fallback_messages = [{"role": "user", "content": fallback_prompt}]
-            fallback_response = gemini.invoke(fallback_messages)
-            fallback_text = fallback_response.content.strip()
-            fallback_data = json.loads(fallback_text)
-            role_choice = fallback_data.get("roles", "vol")
-            if role_choice == "both":
+        # Check for truly inappropriate content (sexual, prank)
+        inappropriate_keywords = [
+            "sexy",
+            "kiss",
+            "love",
+            "haha",
+            "lol",
+            "prank",
+            "joke",
+            "fake",
+        ]
+        is_inappropriate = any(
+            keyword in help_lower for keyword in inappropriate_keywords
+        )
+
+        if is_inappropriate:
+            description = "Verify request details and assess if legitimate emergency assistance is needed."
+            roles = ["vol"]
+        else:
+            # Legitimate emergency keywords
+            food_keywords = [
+                "food",
+                "hungry",
+                "hunger",
+                "starving",
+                "eat",
+                "meal",
+                "water",
+                "thirsty",
+                "drink",
+            ]
+            medical_keywords = [
+                "medical",
+                "injury",
+                "hurt",
+                "bleeding",
+                "unconscious",
+                "rescue",
+                "trapped",
+                "fire",
+                "pain",
+                "sick",
+                "ill",
+            ]
+            mass_keywords = [
+                "many people",
+                "multiple people",
+                "crowd",
+                "group",
+                "families",
+                "everyone",
+            ]
+
+            needs_food = any(keyword in help_lower for keyword in food_keywords)
+            needs_medical = any(keyword in help_lower for keyword in medical_keywords)
+            mass_casualty = any(keyword in help_lower for keyword in mass_keywords)
+
+            if mass_casualty and (needs_medical or urgency == "high"):
+                description = f"Coordinate emergency response for multiple people needing {help_needed} at location ({latitude}, {longitude})."
                 roles = ["vol", "fr"]
-            elif role_choice in ["vol", "fr"]:
-                roles = [role_choice]
-            else:
-                roles = ["vol"]
-            description = fallback_data.get(
-                "description",
-                f"Assist person needing {help_needed} at location ({latitude}, {longitude})."
-            )
-        except Exception as e:
-            description = f"Assist person needing {help_needed} at location ({latitude}, {longitude})."
-            help_lower = help_needed.lower()
-            emergency_lower = emergency_type.lower()
-            inappropriate_keywords = ["joke", "funny", "lol", "haha", "prank", "fake", "test123", "random"]
-            is_inappropriate = any(keyword in help_lower for keyword in inappropriate_keywords)
-            if is_inappropriate:
-                description = "Assess situation appropriately and provide guidance on proper emergency procedures."
+            elif needs_medical or urgency == "high":
+                description = f"Provide immediate medical assistance to person needing {help_needed} at location ({latitude}, {longitude})."
+                roles = ["fr"]
+            elif needs_food:
+                description = f"Deliver food and water supplies to person at location ({latitude}, {longitude})."
                 roles = ["vol"]
             else:
-                mass_casualty = any(keyword in help_lower for keyword in ["many people", "multiple people", "crowd", "group", "families"])
-                complex_emergency = any(keyword in emergency_lower for keyword in ["major", "widespread", "multiple", "mass", "large scale"])
-                needs_fr = any(keyword in help_lower for keyword in ["medical", "injury", "hurt", "bleeding", "unconscious", "rescue", "trapped", "fire", "emergency"])
-                high_urgency = urgency in ["high", "urgent"] or any(keyword in help_lower for keyword in ["urgent", "critical", "immediate", "asap"])
-                if (mass_casualty or complex_emergency) and (needs_fr or high_urgency):
-                    roles = ["vol", "fr"]
-                elif needs_fr or high_urgency:
-                    roles = ["fr"]
-                else:
-                    roles = ["vol"]
-            if nearby_resources and not is_inappropriate:
+                description = f"Assist person needing {help_needed} at location ({latitude}, {longitude})."
+                roles = ["vol"]
+
+            # Add resource coordination if available
+            if nearby_resources:
                 closest_resource = nearby_resources[0]
                 description += f" Coordinate with {closest_resource.get('name', 'nearby resource')} for assistance."
+
         task_id = str(uuid.uuid4())
         task = {
             "task_id": task_id,
@@ -213,7 +254,7 @@ def generate_emergency_task(state: EmergencyRequestState) -> EmergencyRequestSta
             "roles": roles,
             "emergency_type": emergency_type,
             "urgency_level": urgency,
-            "latitude": float(latitude),  # FIX: Convert to float
+            "latitude": float(latitude),
             "longitude": float(longitude),
             "help_needed": help_needed,
             "user_id": state["user_id"],
@@ -230,7 +271,9 @@ def save_task_to_db(state: EmergencyRequestState) -> EmergencyRequestState:
     disaster_id = state["disaster_id"]
     # Delete any existing tasks for this user and disaster before saving the new one
     try:
-        existing_tasks = appwrite_service.list_tasks_by_user_and_disaster(user_id, disaster_id)
+        existing_tasks = appwrite_service.list_tasks_by_user_and_disaster(
+            user_id, disaster_id
+        )
         for task in existing_tasks:
             task_id = task.get("$id") or task.get("task_id")
             # Only delete if first_Task is False (or missing)
@@ -239,7 +282,7 @@ def save_task_to_db(state: EmergencyRequestState) -> EmergencyRequestState:
                     appwrite_service.databases.delete_document(
                         database_id=appwrite_service.database_id,
                         collection_id=appwrite_service.tasks_collection_Id,
-                        document_id=task_id
+                        document_id=task_id,
                     )
                 except Exception as e:
                     pass
@@ -267,7 +310,9 @@ def save_user_request(state: EmergencyRequestState) -> EmergencyRequestState:
         "status": "submitted",
         "feedback": None,
         "assigned_roles": state["generated_task"]["roles"],
-        "ai_reasoning": state["generated_task"].get("ai_reasoning", "No reasoning provided"),
+        "ai_reasoning": state["generated_task"].get(
+            "ai_reasoning", "No reasoning provided"
+        ),
         "userId": user_id,
     }
     try:
@@ -330,7 +375,7 @@ def delete_task_by_id(task_id: str):
         appwrite_service.databases.delete_document(
             database_id=appwrite_service.database_id,
             collection_id=appwrite_service.tasks_collection_Id,
-            document_id=task_id
+            document_id=task_id,
         )
     except Exception as e:
         pass
