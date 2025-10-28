@@ -9,7 +9,7 @@ Beminithiya is a disaster management application with a React frontend, FastAPI 
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/Adhishtanaka/Beminithiya.git
+git clone https://github.com/isaramadunika/disaster management system.git
 cd Beminithiya
 ```
 
